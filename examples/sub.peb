@@ -1,0 +1,6 @@
+craft add | a, b |
+(
+    make a - b;
+)
+
+mould(sub | 30, 20 |);
