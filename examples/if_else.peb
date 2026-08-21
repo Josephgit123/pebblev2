@@ -1,0 +1,10 @@
+craft check | x |
+(
+    if x > 20 (
+        make 100;
+    ) else (
+        make 200;
+    )
+)
+
+mould(check | 10 |);

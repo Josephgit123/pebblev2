@@ -1,6 +1,6 @@
-craft add | a, b |
+craft subtraction | a, b |
 (
     make a - b;
 )
 
-mould(sub | 30, 20 |);
+mould(subtraction | 10, 3 |);

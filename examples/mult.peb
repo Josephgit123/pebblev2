@@ -1,0 +1,6 @@
+craft multiplication | a, b |
+(
+    make a * b;
+)
+
+mould(multiplication | 10, 3 |);

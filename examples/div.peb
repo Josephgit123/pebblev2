@@ -1,0 +1,6 @@
+craft division | a, b |
+(
+    make a / b;
+)
+
+mould(division | 10, 3 |);

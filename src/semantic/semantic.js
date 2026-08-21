@@ -2,21 +2,24 @@ class SemanticAnalyzer {
     constructor() {
         this.functions = new Map();
         this.currentFunction = null;
+        this.currentVariables = null;
     }
 
     analyze(ast) {
-        // First pass:
-        // collect all function declarations.
+        // First pass: find all functions.
         for (const node of ast.body) {
             if (node.type === "FunctionDeclaration") {
                 this.declareFunction(node);
             }
         }
 
-        // Second pass:
-        // check everything.
+        // Second pass: check every part of the program.
         for (const node of ast.body) {
-            this.checkNode(node);
+            if (node.type === "FunctionDeclaration") {
+                this.checkFunction(node);
+            } else {
+                this.checkMainStatement(node);
+            }
         }
 
         return ast;
@@ -38,89 +41,267 @@ class SemanticAnalyzer {
         });
     }
 
-    checkNode(node) {
-        switch (node.type) {
-            case "FunctionDeclaration":
-                this.checkFunction(node);
-                break;
-
-            case "PrintStatement":
-                this.checkExpression(node.value);
-                break;
-
-            default:
-                throw new Error(
-                    `Semantic Error: Unsupported node '${node.type}'.`
-                );
-        }
-    }
-
     checkFunction(node) {
         this.currentFunction = node;
+        this.currentVariables = new Set();
 
-        const localNames = new Set();
-
-        // Register parameters
         for (const parameter of node.parameters) {
-            if (localNames.has(parameter.name)) {
+            if (this.currentVariables.has(parameter.name)) {
                 throw new Error(
-                    `Semantic Error: Parameter '${parameter.name}' is declared more than once.`
+                    `Semantic Error: Duplicate parameter '${parameter.name}'.`
                 );
             }
 
-            localNames.add(parameter.name);
+            this.currentVariables.add(parameter.name);
         }
 
         for (const statement of node.body) {
-            if (statement.type === "ReturnStatement") {
-                this.checkExpression(
-                    statement.value,
-                    localNames
-                );
-            } else {
-                throw new Error(
-                    `Semantic Error: Unsupported statement '${statement.type}'.`
-                );
-            }
+            this.checkStatement(statement, true);
         }
 
         this.currentFunction = null;
+        this.currentVariables = null;
     }
 
-    checkExpression(node, localNames = new Set()) {
+    checkMainStatement(node) {
+        if (!this.currentVariables) {
+            this.currentVariables = new Set();
+        }
+
+        this.checkStatement(node, false);
+    }
+
+    checkStatement(node, insideFunction) {
         switch (node.type) {
+
+            case "VariableDeclaration": {
+                if (this.currentVariables.has(node.name)) {
+                    throw new Error(
+                        `Semantic Error: Variable '${node.name}' is already declared.`
+                    );
+                }
+
+                const type = this.checkExpression(
+                    node.initializer
+                );
+
+                if (type !== "int") {
+                    throw new Error(
+                        `Semantic Error: Variable '${node.name}' must contain an integer.`
+                    );
+                }
+
+                this.currentVariables.add(node.name);
+                break;
+            }
+
+            case "Assignment": {
+                if (!this.currentVariables.has(node.name)) {
+                    throw new Error(
+                        `Semantic Error: Undefined variable '${node.name}'.`
+                    );
+                }
+
+                const type = this.checkExpression(node.value);
+
+                if (type !== "int") {
+                    throw new Error(
+                        `Semantic Error: Assignment to '${node.name}' requires an integer.`
+                    );
+                }
+
+                break;
+            }
+
+            case "ReturnStatement": {
+                if (!insideFunction) {
+                    throw new Error(
+                        "Semantic Error: 'make' can only be used inside a function."
+                    );
+                }
+
+                const type = this.checkExpression(
+                    node.value
+                );
+
+                if (type !== "int") {
+                    throw new Error(
+                        "Semantic Error: 'make' must return an integer."
+                    );
+                }
+
+                break;
+            }
+
+            case "PrintStatement": {
+                const type = this.checkExpression(
+                    node.value
+                );
+
+                if (type !== "int" && type !== "bool") {
+                    throw new Error(
+                        "Semantic Error: 'mould' can only print integers or booleans."
+                    );
+                }
+
+                break;
+            }
+
+            case "ExpressionStatement":
+                this.checkExpression(
+                    node.expression
+                );
+                break;
+
+            case "IfStatement": {
+                const conditionType =
+                    this.checkExpression(
+                        node.condition
+                    );
+
+                if (conditionType !== "bool") {
+                    throw new Error(
+                        "Semantic Error: 'if' condition must be a comparison."
+                    );
+                }
+
+                for (const statement of node.thenBranch) {
+                    this.checkStatement(
+                        statement,
+                        insideFunction
+                    );
+                }
+
+                if (node.elseBranch) {
+                    for (const statement of node.elseBranch) {
+                        this.checkStatement(
+                            statement,
+                            insideFunction
+                        );
+                    }
+                }
+
+                break;
+            }
+
+            case "WhileStatement": {
+                const conditionType =
+                    this.checkExpression(
+                        node.condition
+                    );
+
+                if (conditionType !== "bool") {
+                    throw new Error(
+                        "Semantic Error: 'while' condition must be a comparison."
+                    );
+                }
+
+                for (const statement of node.body) {
+                    this.checkStatement(
+                        statement,
+                        insideFunction
+                    );
+                }
+
+                break;
+            }
+
+            default:
+                throw new Error(
+                    `Semantic Error: Unsupported statement '${node.type}'.`
+                );
+        }
+    }
+
+    checkExpression(node) {
+        switch (node.type) {
+
             case "IntegerLiteral":
                 return "int";
 
             case "Identifier":
-                if (!localNames.has(node.name)) {
+                if (!this.currentVariables.has(node.name)) {
                     throw new Error(
-                        `Semantic Error: Undefined identifier '${node.name}'` +
-                        this.getFunctionContext()
+                        `Semantic Error: Undefined identifier '${node.name}'.`
                     );
                 }
 
                 return "int";
 
+            case "UnaryExpression": {
+                if (node.operator !== "-") {
+                    throw new Error(
+                        `Semantic Error: Unsupported unary operator '${node.operator}'.`
+                    );
+                }
+
+                const type =
+                    this.checkExpression(node.right);
+
+                if (type !== "int") {
+                    throw new Error(
+                        "Semantic Error: Unary '-' requires an integer."
+                    );
+                }
+
+                return "int";
+            }
+
             case "BinaryExpression": {
-                const leftType = this.checkExpression(
-                    node.left,
-                    localNames
-                );
+                const leftType =
+                    this.checkExpression(node.left);
 
-                const rightType = this.checkExpression(
-                    node.right,
-                    localNames
-                );
+                const rightType =
+                    this.checkExpression(node.right);
 
-                if (node.operator === "+") {
-                    if (leftType !== "int" || rightType !== "int") {
+                const arithmeticOperators = [
+                    "+",
+                    "-",
+                    "*",
+                    "/"
+                ];
+
+                const comparisonOperators = [
+                    ">",
+                    ">=",
+                    "<",
+                    "<=",
+                    "==",
+                    "!="
+                ];
+
+                if (
+                    arithmeticOperators.includes(
+                        node.operator
+                    )
+                ) {
+                    if (
+                        leftType !== "int" ||
+                        rightType !== "int"
+                    ) {
                         throw new Error(
-                            `Semantic Error: Operator '+' requires two integers.`
+                            `Semantic Error: Operator '${node.operator}' requires two integers.`
                         );
                     }
 
                     return "int";
+                }
+
+                if (
+                    comparisonOperators.includes(
+                        node.operator
+                    )
+                ) {
+                    if (
+                        leftType !== "int" ||
+                        rightType !== "int"
+                    ) {
+                        throw new Error(
+                            `Semantic Error: Comparison '${node.operator}' requires two integers.`
+                        );
+                    }
+
+                    return "bool";
                 }
 
                 throw new Error(
@@ -129,10 +310,7 @@ class SemanticAnalyzer {
             }
 
             case "FunctionCall":
-                return this.checkFunctionCall(
-                    node,
-                    localNames
-                );
+                return this.checkFunctionCall(node);
 
             default:
                 throw new Error(
@@ -141,8 +319,9 @@ class SemanticAnalyzer {
         }
     }
 
-    checkFunctionCall(node, localNames) {
-        const functionInfo = this.functions.get(node.name);
+    checkFunctionCall(node) {
+        const functionInfo =
+            this.functions.get(node.name);
 
         if (!functionInfo) {
             throw new Error(
@@ -162,27 +341,17 @@ class SemanticAnalyzer {
         }
 
         for (const argument of node.arguments) {
-            const argumentType = this.checkExpression(
-                argument,
-                localNames
-            );
+            const type =
+                this.checkExpression(argument);
 
-            if (argumentType !== "int") {
+            if (type !== "int") {
                 throw new Error(
-                    `Semantic Error: Function argument must be an integer.`
+                    "Semantic Error: Function arguments must be integers."
                 );
             }
         }
 
         return "int";
-    }
-
-    getFunctionContext() {
-        if (!this.currentFunction) {
-            return "";
-        }
-
-        return ` in function '${this.currentFunction.name}'`;
     }
 }
 

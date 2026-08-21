@@ -1,0 +1,11 @@
+craft countdown | x |
+(
+    while x > 0 (
+        mould(x);
+        x = x - 1;
+    )
+
+    make 0;
+)
+
+mould(countdown | 5 |);

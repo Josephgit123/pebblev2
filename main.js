@@ -8,89 +8,122 @@ const SemanticAnalyzer = require("./src/semantic/semantic");
 const CodeGenerator = require("./src/codegen/codegen");
 
 
+// Get source file
+
 
 const sourceFile = process.argv[2];
 
 if (!sourceFile) {
-    console.error("Usage: node main.js <file.peb>");
+    console.error(
+        "Usage: node main.js <file.peb>"
+    );
+
     process.exit(1);
 }
 
-const sourcePath = path.resolve(sourceFile);
+const sourcePath = path.resolve(
+    sourceFile
+);
 
 if (!fs.existsSync(sourcePath)) {
-    console.error(`File not found: ${sourceFile}`);
+    console.error(
+        `File not found: ${sourceFile}`
+    );
+
     process.exit(1);
 }
 
-// ----------------------------------
+
 // Read Pebble source
-// ----------------------------------
 
-const source = fs.readFileSync(sourcePath, "utf8");
 
-// ----------------------------------
+const source =
+    fs.readFileSync(
+        sourcePath,
+        "utf8"
+    );
+
+
 // Lexer
-// ----------------------------------
 
-const lexer = new Lexer(source);
-const tokens = lexer.tokenize();
 
-// ----------------------------------
+const lexer =
+    new Lexer(source);
+
+const tokens =
+    lexer.tokenize();
+
+
 // Parser
-// ----------------------------------
 
-const parser = new Parser(tokens);
-const ast = parser.parse();
 
-// semantic analysis
+const parser =
+    new Parser(tokens);
 
-const semanticAnalyzer = new SemanticAnalyzer();
+const ast =
+    parser.parse();
+
+
+// Semantic analysis
+
+
+const semanticAnalyzer =
+    new SemanticAnalyzer();
 
 semanticAnalyzer.analyze(ast);
 
-// ----------------------------------
+
 // Code generation
-// ----------------------------------
 
-const codeGenerator = new CodeGenerator();
-const assembly = codeGenerator.generate(ast);
 
-// ----------------------------------
-// Output file names
-// ----------------------------------
+const codeGenerator =
+    new CodeGenerator();
 
-const directory = path.dirname(sourcePath);
+const assembly =
+    codeGenerator.generate(ast);
 
-const baseName = path.basename(
-    sourcePath,
-    path.extname(sourcePath)
-);
+// Output paths
 
-const assemblyPath = path.join(
-    directory,
-    `${baseName}.asm`
-);
 
-const objectPath = path.join(
-    directory,
-    `${baseName}.obj`
-);
+const directory =
+    path.dirname(sourcePath);
 
-const executablePath = path.join(
-    directory,
-    `${baseName}.exe`
-);
+const baseName =
+    path.basename(
+        sourcePath,
+        path.extname(sourcePath)
+    );
 
-// ----------------------------------
+const assemblyPath =
+    path.join(
+        directory,
+        `${baseName}.asm`
+    );
+
+const objectPath =
+    path.join(
+        directory,
+        `${baseName}.obj`
+    );
+
+const executablePath =
+    path.join(
+        directory,
+        `${baseName}.exe`
+    );
+
+
 // Write assembly
-// ----------------------------------
 
-fs.writeFileSync(assemblyPath, assembly);
 
-// ----------------------------------
-// Assemble with NASM
-// ----------------------------------
+fs.writeFileSync(
+    assemblyPath,
+    assembly
+);
+
+
+// Assemble
+
 
 execFileSync(
     "nasm",
@@ -102,13 +135,11 @@ execFileSync(
         objectPath
     ],
     {
-        stdio: "ignore"
+        stdio: "inherit"
     }
 );
 
-// ----------------------------------
-// Link with GCC
-// ----------------------------------
+
 
 execFileSync(
     "gcc",
@@ -118,13 +149,10 @@ execFileSync(
         executablePath
     ],
     {
-        stdio: "ignore"
+        stdio: "inherit"
     }
 );
 
-// ----------------------------------
-// Run compiled Pebble program
-// ----------------------------------
 
 execFileSync(
     executablePath,

@@ -1,0 +1,10 @@
+craft greatest | a, b |
+(
+    if a > b (
+        make a;
+    ) else (
+        make b;
+    )
+)
+
+mould(greatest | 10, 20 |);

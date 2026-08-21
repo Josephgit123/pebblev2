@@ -1,0 +1,7 @@
+hold a = 10;
+hold b = 3;
+
+mould(a + b);
+mould(a - b);
+mould(a * b);
+mould(a / b);

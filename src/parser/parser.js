@@ -6,10 +6,6 @@ class Parser {
         this.current = 0;
     }
 
-    // -------------------------
-    // Utility functions
-    // -------------------------
-
     peek() {
         return this.tokens[this.current];
     }
@@ -57,34 +53,34 @@ class Parser {
         const token = this.peek();
 
         throw new Error(
-            `Parser error: ${message}. Found '${token.value}'.`
+            `Parser Error: ${message}. Found '${token.value}'.`
         );
     }
 
-    // -------------------------
+    // ---------------------------------------
     // Program
-    // -------------------------
+    // ---------------------------------------
 
     parse() {
-        const declarations = [];
+        const body = [];
 
         while (!this.isAtEnd()) {
             if (this.check(TokenType.CRAFT)) {
-                declarations.push(this.functionDeclaration());
+                body.push(this.functionDeclaration());
             } else {
-                declarations.push(this.statement());
+                body.push(this.statement());
             }
         }
 
         return {
             type: "Program",
-            body: declarations
+            body
         };
     }
 
-    // -------------------------
-    // Function declaration
-    // -------------------------
+    // ---------------------------------------
+    // Function
+    // ---------------------------------------
 
     functionDeclaration() {
         this.consume(
@@ -131,7 +127,10 @@ class Parser {
 
         const body = [];
 
-        while (!this.check(TokenType.RPAREN) && !this.isAtEnd()) {
+        while (
+            !this.check(TokenType.RPAREN) &&
+            !this.isAtEnd()
+        ) {
             body.push(this.statement());
         }
 
@@ -148,9 +147,9 @@ class Parser {
         };
     }
 
-    // -------------------------
+    // ---------------------------------------
     // Statements
-    // -------------------------
+    // ---------------------------------------
 
     statement() {
         if (this.match(TokenType.MAKE)) {
@@ -161,14 +160,102 @@ class Parser {
             return this.printStatement();
         }
 
-        throw new Error(
-            `Parser error: Unexpected token '${this.peek().value}'.`
+        if (this.match(TokenType.HOLD)) {
+            return this.variableDeclaration();
+        }
+
+        if (this.match(TokenType.IF)) {
+            return this.ifStatement();
+        }
+
+        if (this.match(TokenType.WHILE)) {
+            return this.whileStatement();
+        }
+
+        // Assignment:
+        // x = x + 1;
+        if (
+            this.check(TokenType.IDENTIFIER) &&
+            this.tokens[this.current + 1]?.type === TokenType.ASSIGN
+        ) {
+            return this.assignmentStatement();
+        }
+
+        // Expression statement
+        const expression = this.expression();
+
+        this.consume(
+            TokenType.SEMICOLON,
+            "Expected ';' after expression"
         );
+
+        return {
+            type: "ExpressionStatement",
+            expression
+        };
     }
 
-    // -------------------------
-    // make statement
-    // -------------------------
+    // ---------------------------------------
+    // Variable declaration
+    // ---------------------------------------
+
+    variableDeclaration() {
+        const name = this.consume(
+            TokenType.IDENTIFIER,
+            "Expected variable name"
+        );
+
+        this.consume(
+            TokenType.ASSIGN,
+            "Expected '=' after variable name"
+        );
+
+        const initializer = this.expression();
+
+        this.consume(
+            TokenType.SEMICOLON,
+            "Expected ';' after variable declaration"
+        );
+
+        return {
+            type: "VariableDeclaration",
+            name: name.value,
+            initializer
+        };
+    }
+
+    // ---------------------------------------
+    // Assignment
+    // ---------------------------------------
+
+    assignmentStatement() {
+        const name = this.consume(
+            TokenType.IDENTIFIER,
+            "Expected variable name"
+        );
+
+        this.consume(
+            TokenType.ASSIGN,
+            "Expected '='"
+        );
+
+        const value = this.expression();
+
+        this.consume(
+            TokenType.SEMICOLON,
+            "Expected ';' after assignment"
+        );
+
+        return {
+            type: "Assignment",
+            name: name.value,
+            value
+        };
+    }
+
+    // ---------------------------------------
+    // Return
+    // ---------------------------------------
 
     returnStatement() {
         const value = this.expression();
@@ -184,9 +271,9 @@ class Parser {
         };
     }
 
-    // -------------------------
-    // mould statement
-    // -------------------------
+    // ---------------------------------------
+    // Print
+    // ---------------------------------------
 
     printStatement() {
         this.consume(
@@ -198,7 +285,7 @@ class Parser {
 
         this.consume(
             TokenType.RPAREN,
-            "Expected ')' after expression"
+            "Expected ')' after mould expression"
         );
 
         this.consume(
@@ -212,20 +299,115 @@ class Parser {
         };
     }
 
-    // -------------------------
-    // Expressions
-    // -------------------------
+    // ---------------------------------------
+    // If / Else
+    // ---------------------------------------
 
-    expression() {
-        return this.addition();
+    ifStatement() {
+        const condition = this.expression();
+
+        this.consume(
+            TokenType.LPAREN,
+            "Expected '(' before if block"
+        );
+
+        const thenBranch = [];
+
+        while (
+            !this.check(TokenType.RPAREN) &&
+            !this.isAtEnd()
+        ) {
+            thenBranch.push(this.statement());
+        }
+
+        this.consume(
+            TokenType.RPAREN,
+            "Expected ')' after if block"
+        );
+
+        let elseBranch = null;
+
+        if (this.match(TokenType.ELSE)) {
+            this.consume(
+                TokenType.LPAREN,
+                "Expected '(' before else block"
+            );
+
+            elseBranch = [];
+
+            while (
+                !this.check(TokenType.RPAREN) &&
+                !this.isAtEnd()
+            ) {
+                elseBranch.push(this.statement());
+            }
+
+            this.consume(
+                TokenType.RPAREN,
+                "Expected ')' after else block"
+            );
+        }
+
+        return {
+            type: "IfStatement",
+            condition,
+            thenBranch,
+            elseBranch
+        };
     }
 
-    addition() {
-        let expression = this.primary();
+    // ---------------------------------------
+    // While
+    // ---------------------------------------
 
-        while (this.match(TokenType.PLUS)) {
+    whileStatement() {
+        const condition = this.expression();
+
+        this.consume(
+            TokenType.LPAREN,
+            "Expected '(' before while block"
+        );
+
+        const body = [];
+
+        while (
+            !this.check(TokenType.RPAREN) &&
+            !this.isAtEnd()
+        ) {
+            body.push(this.statement());
+        }
+
+        this.consume(
+            TokenType.RPAREN,
+            "Expected ')' after while block"
+        );
+
+        return {
+            type: "WhileStatement",
+            condition,
+            body
+        };
+    }
+
+    // ---------------------------------------
+    // Expression precedence
+    // ---------------------------------------
+
+    expression() {
+        return this.equality();
+    }
+
+    equality() {
+        let expression = this.comparison();
+
+        while (
+            this.match(
+                TokenType.EQUAL_EQUAL,
+                TokenType.NOT_EQUAL
+            )
+        ) {
             const operator = this.previous();
-            const right = this.primary();
+            const right = this.comparison();
 
             expression = {
                 type: "BinaryExpression",
@@ -238,9 +420,94 @@ class Parser {
         return expression;
     }
 
-    // -------------------------
+    comparison() {
+        let expression = this.term();
+
+        while (
+            this.match(
+                TokenType.GREATER,
+                TokenType.GREATER_EQUAL,
+                TokenType.LESS,
+                TokenType.LESS_EQUAL
+            )
+        ) {
+            const operator = this.previous();
+            const right = this.term();
+
+            expression = {
+                type: "BinaryExpression",
+                left: expression,
+                operator: operator.value,
+                right
+            };
+        }
+
+        return expression;
+    }
+
+    term() {
+        let expression = this.factor();
+
+        while (
+            this.match(
+                TokenType.PLUS,
+                TokenType.MINUS
+            )
+        ) {
+            const operator = this.previous();
+            const right = this.factor();
+
+            expression = {
+                type: "BinaryExpression",
+                left: expression,
+                operator: operator.value,
+                right
+            };
+        }
+
+        return expression;
+    }
+
+    factor() {
+        let expression = this.unary();
+
+        while (
+            this.match(
+                TokenType.STAR,
+                TokenType.SLASH
+            )
+        ) {
+            const operator = this.previous();
+            const right = this.unary();
+
+            expression = {
+                type: "BinaryExpression",
+                left: expression,
+                operator: operator.value,
+                right
+            };
+        }
+
+        return expression;
+    }
+
+    unary() {
+        if (this.match(TokenType.MINUS)) {
+            const operator = this.previous();
+
+            return {
+                type: "UnaryExpression",
+                operator: operator.value,
+                right: this.unary()
+            };
+        }
+
+        return this.primary();
+    }
+
+    // ---------------------------------------
     // Primary expressions
-    // -------------------------
+    // ---------------------------------------
 
     primary() {
         if (this.match(TokenType.INTEGER)) {
@@ -253,8 +520,7 @@ class Parser {
         if (this.match(TokenType.IDENTIFIER)) {
             const identifier = this.previous();
 
-            // Function call:
-            // add | 10, 20 |
+            // Function call
             if (this.match(TokenType.PIPE)) {
                 const argumentsList = [];
 
@@ -263,7 +529,9 @@ class Parser {
                         argumentsList.push(
                             this.expression()
                         );
-                    } while (this.match(TokenType.COMMA));
+                    } while (
+                        this.match(TokenType.COMMA)
+                    );
                 }
 
                 this.consume(
@@ -284,8 +552,19 @@ class Parser {
             };
         }
 
+        if (this.match(TokenType.LPAREN)) {
+            const expression = this.expression();
+
+            this.consume(
+                TokenType.RPAREN,
+                "Expected ')' after expression"
+            );
+
+            return expression;
+        }
+
         throw new Error(
-            `Parser error: Unexpected token '${this.peek().value}'.`
+            `Parser Error: Unexpected token '${this.peek().value}'.`
         );
     }
 }

@@ -19,6 +19,14 @@ class Lexer {
         return this.source[this.position];
     }
 
+    peekNext() {
+        if (this.position + 1 >= this.source.length) {
+            return "\0";
+        }
+
+        return this.source[this.position + 1];
+    }
+
     advance() {
         const character = this.peek();
         this.position++;
@@ -34,38 +42,75 @@ class Lexer {
     }
 
     isLetterOrDigit(character) {
-        return this.isLetter(character) || this.isDigit(character);
-    }
-
-   scanIdentifier() {
-    let value = "";
-
-    while (this.isLetterOrDigit(this.peek())) {
-        value += this.advance();
-    }
-
-    if (value === "craft") {
-        this.tokens.push(
-            new Token(TokenType.CRAFT, value)
-        );
-    } else if (value === "make") {
-        this.tokens.push(
-            new Token(TokenType.MAKE, value)
-        );
-    } else if (value === "mould") {
-        this.tokens.push(
-            new Token(TokenType.MOULD, value)
-        );
-    } else if (value === "point") {
-        this.tokens.push(
-            new Token(TokenType.POINT, value)
-        );
-    } else {
-        this.tokens.push(
-            new Token(TokenType.IDENTIFIER, value)
+        return (
+            this.isLetter(character) ||
+            this.isDigit(character)
         );
     }
-}
+
+    scanIdentifier() {
+        let value = "";
+
+        while (this.isLetterOrDigit(this.peek())) {
+            value += this.advance();
+        }
+
+        switch (value) {
+            case "craft":
+                this.tokens.push(
+                    new Token(TokenType.CRAFT, value)
+                );
+                break;
+
+            case "make":
+                this.tokens.push(
+                    new Token(TokenType.MAKE, value)
+                );
+                break;
+
+            case "mould":
+                this.tokens.push(
+                    new Token(TokenType.MOULD, value)
+                );
+                break;
+
+            case "hold":
+                this.tokens.push(
+                    new Token(TokenType.HOLD, value)
+                );
+                break;
+
+            case "if":
+                this.tokens.push(
+                    new Token(TokenType.IF, value)
+                );
+                break;
+
+            case "else":
+                this.tokens.push(
+                    new Token(TokenType.ELSE, value)
+                );
+                break;
+
+            case "while":
+                this.tokens.push(
+                    new Token(TokenType.WHILE, value)
+                );
+                break;
+
+            case "point":
+                this.tokens.push(
+                    new Token(TokenType.POINT, value)
+                );
+                break;
+
+            default:
+                this.tokens.push(
+                    new Token(TokenType.IDENTIFIER, value)
+                );
+                break;
+        }
+    }
 
     scanNumber() {
         let value = "";
@@ -83,29 +128,71 @@ class Lexer {
         const character = this.advance();
 
         // Ignore whitespace
-        if (character === " " ||
+        if (
+            character === " " ||
             character === "\n" ||
             character === "\t" ||
-            character === "\r") {
+            character === "\r"
+        ) {
             return;
         }
 
-        // Identifiers and keywords
+        // Identifier / keyword
         if (this.isLetter(character)) {
             this.position--;
             this.scanIdentifier();
             return;
         }
 
-        // Numbers
+        // Number
         if (this.isDigit(character)) {
             this.position--;
             this.scanNumber();
             return;
         }
 
-        switch (character) {
+        // Two-character operators
+        if (character === "=" && this.peek() === "=") {
+            this.advance();
 
+            this.tokens.push(
+                new Token(TokenType.EQUAL_EQUAL, "==")
+            );
+
+            return;
+        }
+
+        if (character === "!" && this.peek() === "=") {
+            this.advance();
+
+            this.tokens.push(
+                new Token(TokenType.NOT_EQUAL, "!=")
+            );
+
+            return;
+        }
+
+        if (character === ">" && this.peek() === "=") {
+            this.advance();
+
+            this.tokens.push(
+                new Token(TokenType.GREATER_EQUAL, ">=")
+            );
+
+            return;
+        }
+
+        if (character === "<" && this.peek() === "=") {
+            this.advance();
+
+            this.tokens.push(
+                new Token(TokenType.LESS_EQUAL, "<=")
+            );
+
+            return;
+        }
+
+        switch (character) {
             case "|":
                 this.tokens.push(
                     new Token(TokenType.PIPE, "|")
@@ -115,6 +202,54 @@ class Lexer {
             case "+":
                 this.tokens.push(
                     new Token(TokenType.PLUS, "+")
+                );
+                break;
+
+            case "-":
+                this.tokens.push(
+                    new Token(TokenType.MINUS, "-")
+                );
+                break;
+
+            case "*":
+                this.tokens.push(
+                    new Token(TokenType.STAR, "*")
+                );
+                break;
+
+            case "/":
+                this.tokens.push(
+                    new Token(TokenType.SLASH, "/")
+                );
+                break;
+
+            case ">":
+                this.tokens.push(
+                    new Token(TokenType.GREATER, ">")
+                );
+                break;
+
+            case "<":
+                this.tokens.push(
+                    new Token(TokenType.LESS, "<")
+                );
+                break;
+
+            case "=":
+                this.tokens.push(
+                    new Token(TokenType.ASSIGN, "=")
+                );
+                break;
+
+            case ".":
+                this.tokens.push(
+                    new Token(TokenType.DOT, ".")
+                );
+                break;
+
+            case ":":
+                this.tokens.push(
+                    new Token(TokenType.COLON, ":")
                 );
                 break;
 
@@ -136,33 +271,15 @@ class Lexer {
                 );
                 break;
 
-           case ";":
-    this.tokens.push(
-        new Token(TokenType.SEMICOLON, ";")
-    );
-    break;
-
-case ".":
-    this.tokens.push(
-        new Token(TokenType.DOT, ".")
-    );
-    break;
-
-case ":":
-    this.tokens.push(
-        new Token(TokenType.COLON, ":")
-    );
-    break;
-
-case "=":
-    this.tokens.push(
-        new Token(TokenType.ASSIGN, "=")
-    );
-    break;
+            case ";":
+                this.tokens.push(
+                    new Token(TokenType.SEMICOLON, ";")
+                );
+                break;
 
             default:
                 throw new Error(
-                    `Unexpected character: ${character}`
+                    `Lexer Error: Unexpected character '${character}' at position ${this.position - 1}`
                 );
         }
     }

@@ -1,18 +1,41 @@
 const TokenType = {
+    // Keywords
     CRAFT: "CRAFT",
     MAKE: "MAKE",
     MOULD: "MOULD",
+    HOLD: "HOLD",
+    IF: "IF",
+    ELSE: "ELSE",
+    WHILE: "WHILE",
+
+    // Special types
     POINT: "POINT",
 
+    // Values
     IDENTIFIER: "IDENTIFIER",
     INTEGER: "INTEGER",
 
-    PIPE: "PIPE",
+    // Arithmetic
     PLUS: "PLUS",
-    DOT: "DOT",
-    COLON: "COLON",
+    MINUS: "MINUS",
+    STAR: "STAR",
+    SLASH: "SLASH",
+
+    // Comparison
+    GREATER: "GREATER",
+    LESS: "LESS",
+    GREATER_EQUAL: "GREATER_EQUAL",
+    LESS_EQUAL: "LESS_EQUAL",
+    EQUAL_EQUAL: "EQUAL_EQUAL",
+    NOT_EQUAL: "NOT_EQUAL",
+
+    // Assignment
     ASSIGN: "ASSIGN",
 
+    // Symbols
+    PIPE: "PIPE",
+    DOT: "DOT",
+    COLON: "COLON",
     LPAREN: "LPAREN",
     RPAREN: "RPAREN",
     COMMA: "COMMA",
@@ -28,4 +51,7 @@ class Token {
     }
 }
 
-module.exports = { TokenType, Token };
+module.exports = {
+    TokenType,
+    Token
+};
