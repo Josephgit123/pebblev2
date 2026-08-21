@@ -1,0 +1,5 @@
+hold x = 0;
+
+take(x);
+
+mould(x);

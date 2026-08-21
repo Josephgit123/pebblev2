@@ -57,18 +57,27 @@ class Parser {
         );
     }
 
-    // ---------------------------------------
-    // Program
-    // ---------------------------------------
+    // ==================================================
+    // PROGRAM
+    // ==================================================
 
     parse() {
         const body = [];
 
         while (!this.isAtEnd()) {
+            // Ignore blank lines.
+            if (this.match(TokenType.NEWLINE)) {
+                continue;
+            }
+
             if (this.check(TokenType.CRAFT)) {
-                body.push(this.functionDeclaration());
+                body.push(
+                    this.functionDeclaration()
+                );
             } else {
-                body.push(this.statement());
+                body.push(
+                    this.statement()
+                );
             }
         }
 
@@ -78,9 +87,9 @@ class Parser {
         };
     }
 
-    // ---------------------------------------
-    // Function
-    // ---------------------------------------
+    // ==================================================
+    // FUNCTION
+    // ==================================================
 
     functionDeclaration() {
         this.consume(
@@ -102,17 +111,19 @@ class Parser {
 
         if (!this.check(TokenType.PIPE)) {
             do {
-                const parameter = this.consume(
-                    TokenType.IDENTIFIER,
-                    "Expected parameter name"
-                );
+                const parameter =
+                    this.consume(
+                        TokenType.IDENTIFIER,
+                        "Expected parameter name"
+                    );
 
                 parameters.push({
                     type: "Identifier",
                     name: parameter.value
                 });
-
-            } while (this.match(TokenType.COMMA));
+            } while (
+                this.match(TokenType.COMMA)
+            );
         }
 
         this.consume(
@@ -120,23 +131,38 @@ class Parser {
             "Expected '|' after parameters"
         );
 
+        // Function declaration must end its line.
         this.consume(
-            TokenType.LPAREN,
-            "Expected '(' before function body"
+            TokenType.NEWLINE,
+            "Expected newline after function declaration"
+        );
+
+        // Function body must be indented.
+        this.consume(
+            TokenType.INDENT,
+            "Expected indentation before function body"
         );
 
         const body = [];
 
         while (
-            !this.check(TokenType.RPAREN) &&
+            !this.check(TokenType.DEDENT) &&
             !this.isAtEnd()
         ) {
-            body.push(this.statement());
+            if (this.match(TokenType.NEWLINE)) {
+                continue;
+            }
+
+            body.push(
+                this.statement()
+            );
+
+            this.match(TokenType.NEWLINE);
         }
 
         this.consume(
-            TokenType.RPAREN,
-            "Expected ')' after function body"
+            TokenType.DEDENT,
+            "Expected end of function body"
         );
 
         return {
@@ -147,9 +173,9 @@ class Parser {
         };
     }
 
-    // ---------------------------------------
-    // Statements
-    // ---------------------------------------
+    // ==================================================
+    // STATEMENTS
+    // ==================================================
 
     statement() {
         if (this.match(TokenType.MAKE)) {
@@ -164,6 +190,10 @@ class Parser {
             return this.variableDeclaration();
         }
 
+        if (this.match(TokenType.TAKE)) {
+            return this.takeStatement();
+        }
+
         if (this.match(TokenType.IF)) {
             return this.ifStatement();
         }
@@ -172,17 +202,17 @@ class Parser {
             return this.whileStatement();
         }
 
-        // Assignment:
-        // x = x + 1;
+        // Assignment
         if (
             this.check(TokenType.IDENTIFIER) &&
-            this.tokens[this.current + 1]?.type === TokenType.ASSIGN
+            this.tokens[this.current + 1]?.type ===
+                TokenType.ASSIGN
         ) {
             return this.assignmentStatement();
         }
 
-        // Expression statement
-        const expression = this.expression();
+        const expression =
+            this.expression();
 
         this.consume(
             TokenType.SEMICOLON,
@@ -195,22 +225,56 @@ class Parser {
         };
     }
 
-    // ---------------------------------------
-    // Variable declaration
-    // ---------------------------------------
+    // ==================================================
+    // TAKE
+    // ==================================================
+
+    takeStatement() {
+        this.consume(
+            TokenType.LPAREN,
+            "Expected '(' after 'take'"
+        );
+
+        const variable =
+            this.consume(
+                TokenType.IDENTIFIER,
+                "Expected variable name inside take"
+            );
+
+        this.consume(
+            TokenType.RPAREN,
+            "Expected ')' after take variable"
+        );
+
+        this.consume(
+            TokenType.SEMICOLON,
+            "Expected ';' after take statement"
+        );
+
+        return {
+            type: "InputStatement",
+            name: variable.value
+        };
+    }
+
+    // ==================================================
+    // VARIABLE DECLARATION
+    // ==================================================
 
     variableDeclaration() {
-        const name = this.consume(
-            TokenType.IDENTIFIER,
-            "Expected variable name"
-        );
+        const name =
+            this.consume(
+                TokenType.IDENTIFIER,
+                "Expected variable name"
+            );
 
         this.consume(
             TokenType.ASSIGN,
             "Expected '=' after variable name"
         );
 
-        const initializer = this.expression();
+        const initializer =
+            this.expression();
 
         this.consume(
             TokenType.SEMICOLON,
@@ -224,22 +288,24 @@ class Parser {
         };
     }
 
-    // ---------------------------------------
-    // Assignment
-    // ---------------------------------------
+    // ==================================================
+    // ASSIGNMENT
+    // ==================================================
 
     assignmentStatement() {
-        const name = this.consume(
-            TokenType.IDENTIFIER,
-            "Expected variable name"
-        );
+        const name =
+            this.consume(
+                TokenType.IDENTIFIER,
+                "Expected variable name"
+            );
 
         this.consume(
             TokenType.ASSIGN,
             "Expected '='"
         );
 
-        const value = this.expression();
+        const value =
+            this.expression();
 
         this.consume(
             TokenType.SEMICOLON,
@@ -253,12 +319,13 @@ class Parser {
         };
     }
 
-    // ---------------------------------------
-    // Return
-    // ---------------------------------------
+    // ==================================================
+    // RETURN
+    // ==================================================
 
     returnStatement() {
-        const value = this.expression();
+        const value =
+            this.expression();
 
         this.consume(
             TokenType.SEMICOLON,
@@ -271,9 +338,9 @@ class Parser {
         };
     }
 
-    // ---------------------------------------
-    // Print
-    // ---------------------------------------
+    // ==================================================
+    // PRINT
+    // ==================================================
 
     printStatement() {
         this.consume(
@@ -281,7 +348,8 @@ class Parser {
             "Expected '(' after 'mould'"
         );
 
-        const value = this.expression();
+        const value =
+            this.expression();
 
         this.consume(
             TokenType.RPAREN,
@@ -299,52 +367,81 @@ class Parser {
         };
     }
 
-    // ---------------------------------------
-    // If / Else
-    // ---------------------------------------
+    // ==================================================
+    // IF / ELSE
+    // ==================================================
 
     ifStatement() {
-        const condition = this.expression();
+        const condition =
+            this.expression();
 
         this.consume(
-            TokenType.LPAREN,
-            "Expected '(' before if block"
+            TokenType.NEWLINE,
+            "Expected newline after if condition"
+        );
+
+        this.consume(
+            TokenType.INDENT,
+            "Expected indentation after if condition"
         );
 
         const thenBranch = [];
 
         while (
-            !this.check(TokenType.RPAREN) &&
+            !this.check(TokenType.DEDENT) &&
             !this.isAtEnd()
         ) {
-            thenBranch.push(this.statement());
+            if (this.match(TokenType.NEWLINE)) {
+                continue;
+            }
+
+            thenBranch.push(
+                this.statement()
+            );
+
+            this.match(TokenType.NEWLINE);
         }
 
         this.consume(
-            TokenType.RPAREN,
-            "Expected ')' after if block"
+            TokenType.DEDENT,
+            "Expected end of if block"
         );
 
         let elseBranch = null;
 
+        this.match(TokenType.NEWLINE);
+
         if (this.match(TokenType.ELSE)) {
             this.consume(
-                TokenType.LPAREN,
-                "Expected '(' before else block"
+                TokenType.NEWLINE,
+                "Expected newline after else"
+            );
+
+            this.consume(
+                TokenType.INDENT,
+                "Expected indentation after else"
             );
 
             elseBranch = [];
 
             while (
-                !this.check(TokenType.RPAREN) &&
+                !this.check(TokenType.DEDENT) &&
                 !this.isAtEnd()
             ) {
-                elseBranch.push(this.statement());
+                if (this.match(TokenType.NEWLINE)) {
+                    continue;
+                }
+
+                elseBranch.push(
+                    this.statement()
+                );
+
+                this.match(TokenType.NEWLINE);
             }
 
             this.consume(
-                TokenType.RPAREN,
-                "Expected ')' after else block"
+                TokenType.DEDENT,
+                "Expected end of else block"
             );
         }
 
@@ -356,30 +453,44 @@ class Parser {
         };
     }
 
-    // ---------------------------------------
-    // While
-    // ---------------------------------------
+    // ==================================================
+    // WHILE
+    // ==================================================
 
     whileStatement() {
-        const condition = this.expression();
+        const condition =
+            this.expression();
 
         this.consume(
-            TokenType.LPAREN,
-            "Expected '(' before while block"
+            TokenType.NEWLINE,
+            "Expected newline after while condition"
+        );
+
+        this.consume(
+            TokenType.INDENT,
+            "Expected indentation after while condition"
         );
 
         const body = [];
 
         while (
-            !this.check(TokenType.RPAREN) &&
+            !this.check(TokenType.DEDENT) &&
             !this.isAtEnd()
         ) {
-            body.push(this.statement());
+            if (this.match(TokenType.NEWLINE)) {
+                continue;
+            }
+
+            body.push(
+                this.statement()
+            );
+
+            this.match(TokenType.NEWLINE);
         }
 
         this.consume(
-            TokenType.RPAREN,
-            "Expected ')' after while block"
+            TokenType.DEDENT,
+            "Expected end of while block"
         );
 
         return {
@@ -389,16 +500,17 @@ class Parser {
         };
     }
 
-    // ---------------------------------------
-    // Expression precedence
-    // ---------------------------------------
+    // ==================================================
+    // EXPRESSIONS
+    // ==================================================
 
     expression() {
         return this.equality();
     }
 
     equality() {
-        let expression = this.comparison();
+        let expression =
+            this.comparison();
 
         while (
             this.match(
@@ -406,8 +518,11 @@ class Parser {
                 TokenType.NOT_EQUAL
             )
         ) {
-            const operator = this.previous();
-            const right = this.comparison();
+            const operator =
+                this.previous();
+
+            const right =
+                this.comparison();
 
             expression = {
                 type: "BinaryExpression",
@@ -421,7 +536,8 @@ class Parser {
     }
 
     comparison() {
-        let expression = this.term();
+        let expression =
+            this.term();
 
         while (
             this.match(
@@ -431,8 +547,11 @@ class Parser {
                 TokenType.LESS_EQUAL
             )
         ) {
-            const operator = this.previous();
-            const right = this.term();
+            const operator =
+                this.previous();
+
+            const right =
+                this.term();
 
             expression = {
                 type: "BinaryExpression",
@@ -446,7 +565,8 @@ class Parser {
     }
 
     term() {
-        let expression = this.factor();
+        let expression =
+            this.factor();
 
         while (
             this.match(
@@ -454,8 +574,11 @@ class Parser {
                 TokenType.MINUS
             )
         ) {
-            const operator = this.previous();
-            const right = this.factor();
+            const operator =
+                this.previous();
+
+            const right =
+                this.factor();
 
             expression = {
                 type: "BinaryExpression",
@@ -469,7 +592,8 @@ class Parser {
     }
 
     factor() {
-        let expression = this.unary();
+        let expression =
+            this.unary();
 
         while (
             this.match(
@@ -477,8 +601,11 @@ class Parser {
                 TokenType.SLASH
             )
         ) {
-            const operator = this.previous();
-            const right = this.unary();
+            const operator =
+                this.previous();
+
+            const right =
+                this.unary();
 
             expression = {
                 type: "BinaryExpression",
@@ -493,7 +620,8 @@ class Parser {
 
     unary() {
         if (this.match(TokenType.MINUS)) {
-            const operator = this.previous();
+            const operator =
+                this.previous();
 
             return {
                 type: "UnaryExpression",
@@ -505,26 +633,31 @@ class Parser {
         return this.primary();
     }
 
-    // ---------------------------------------
-    // Primary expressions
-    // ---------------------------------------
+    // ==================================================
+    // PRIMARY
+    // ==================================================
 
     primary() {
         if (this.match(TokenType.INTEGER)) {
             return {
                 type: "IntegerLiteral",
-                value: Number(this.previous().value)
+                value: Number(
+                    this.previous().value
+                )
             };
         }
 
         if (this.match(TokenType.IDENTIFIER)) {
-            const identifier = this.previous();
+            const identifier =
+                this.previous();
 
             // Function call
             if (this.match(TokenType.PIPE)) {
                 const argumentsList = [];
 
-                if (!this.check(TokenType.PIPE)) {
+                if (
+                    !this.check(TokenType.PIPE)
+                ) {
                     do {
                         argumentsList.push(
                             this.expression()
@@ -553,7 +686,8 @@ class Parser {
         }
 
         if (this.match(TokenType.LPAREN)) {
-            const expression = this.expression();
+            const expression =
+                this.expression();
 
             this.consume(
                 TokenType.RPAREN,

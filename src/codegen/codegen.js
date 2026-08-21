@@ -1,29 +1,13 @@
 class CodeGenerator {
     constructor() {
-        // This array holds every assembly instruction we generate.
         this.output = [];
-
-        // Used to create unique labels for if/else/while.
         this.labelCounter = 0;
-
-        // Stores where each variable lives in the stack frame.
-        //
-        // Example:
-        // a -> 8
-        // b -> 16
-        //
-        // We will actually use:
-        // [rbp - 8]
-        // [rbp - 16]
         this.variables = new Map();
-
-        // Number of bytes reserved for local variables.
-        this.currentFrameSize = 0;
     }
 
-    // ==================================================
-    // GENERAL HELPERS
-    // ==================================================
+    // ==========================================
+    // HELPER METHODS
+    // ==========================================
 
     emit(line = "") {
         this.output.push(line);
@@ -32,54 +16,53 @@ class CodeGenerator {
     newLabel(prefix) {
         const label = `${prefix}_${this.labelCounter}`;
         this.labelCounter++;
-
         return label;
     }
 
-    // ==================================================
-    // PROGRAM
-    // ==================================================
+    // ==========================================
+    // START CODE GENERATION
+    // ==========================================
 
     generate(ast) {
         this.output = [];
         this.labelCounter = 0;
 
         // -----------------------------
-        // Data section
+        // DATA SECTION
         // -----------------------------
 
         this.emit("section .data");
 
-        // Format string used by printf.
+        // Used by mould()
         this.emit('format db "%lld", 10, 0');
+
+        // Used by take()
+        this.emit('input_format db "%lld", 0');
 
         this.emit("");
 
         // -----------------------------
-        // Code section
+        // TEXT SECTION
         // -----------------------------
 
         this.emit("section .text");
         this.emit("default rel");
         this.emit("global main");
+
+        // C library functions
         this.emit("extern printf");
+        this.emit("extern scanf");
 
         this.emit("");
 
-        // -----------------------------
-        // Generate functions
-        // -----------------------------
-
+        // Generate user functions first
         for (const node of ast.body) {
             if (node.type === "FunctionDeclaration") {
                 this.generateFunction(node);
             }
         }
 
-        // -----------------------------
-        // Generate main
-        // -----------------------------
-
+        // Generate main program statements
         const mainStatements = ast.body.filter(
             node => node.type !== "FunctionDeclaration"
         );
@@ -89,14 +72,14 @@ class CodeGenerator {
         return this.output.join("\n");
     }
 
-    // ==================================================
-    // VARIABLE COLLECTION
-    // ==================================================
+    // ==========================================
+    // VARIABLE MANAGEMENT
+    // ==========================================
 
     collectVariables(statements, parameters = []) {
         const names = [];
 
-        // Add function parameters first.
+        // Add function parameters
         for (const parameter of parameters) {
             if (!names.includes(parameter.name)) {
                 names.push(parameter.name);
@@ -104,14 +87,14 @@ class CodeGenerator {
         }
 
         const visit = statement => {
-            // Variable declaration
+            // hold x = ...
             if (statement.type === "VariableDeclaration") {
                 if (!names.includes(statement.name)) {
                     names.push(statement.name);
                 }
             }
 
-            // Variables inside if/else
+            // Variables inside if
             if (statement.type === "IfStatement") {
                 for (const child of statement.thenBranch) {
                     visit(child);
@@ -139,97 +122,50 @@ class CodeGenerator {
         return names;
     }
 
-    // ==================================================
-    // VARIABLE MEMORY MAP
-    // ==================================================
-
     createVariableMap(names) {
         this.variables.clear();
 
         names.forEach((name, index) => {
-            // First variable = 8 bytes below RBP
-            // Second variable = 16 bytes below RBP
-            // etc.
             const offset = (index + 1) * 8;
-
             this.variables.set(name, offset);
         });
     }
 
-    // ==================================================
-    // STACK FRAME SIZE
-    // ==================================================
-
     calculateFrameSize(variableCount) {
-        /*
-         * Windows x64 requires 32 bytes of shadow space
-         * for function calls.
-         *
-         * Each variable needs 8 bytes.
-         *
-         * We round the variable area to a multiple
-         * of 16 bytes for proper stack alignment.
-         */
-
         const variableBytes = variableCount * 8;
 
+        // Round up to a multiple of 16
         const alignedVariableBytes =
             Math.ceil(variableBytes / 16) * 16;
 
+        // 32 bytes shadow space + variables
         return 32 + alignedVariableBytes;
     }
 
-    // ==================================================
+    // ==========================================
     // FUNCTION GENERATION
-    // ==================================================
+    // ==========================================
 
     generateFunction(node) {
-        // Find all variables used inside this function.
         const variableNames = this.collectVariables(
             node.body,
             node.parameters
         );
 
-        // Create stack locations for them.
         this.createVariableMap(variableNames);
 
-        // Calculate required stack space.
-        const frameSize =
-            this.calculateFrameSize(
-                variableNames.length
-            );
-
-        // Function label.
-        this.emit(`${node.name}:`);
-
-        // -----------------------------
-        // Function prologue
-        // -----------------------------
-
-        // Save old RBP.
-        this.emit("    push rbp");
-
-        // RBP becomes our fixed frame pointer.
-        this.emit("    mov rbp, rsp");
-
-        // Reserve local stack space.
-        this.emit(
-            `    sub rsp, ${frameSize}`
+        const frameSize = this.calculateFrameSize(
+            variableNames.length
         );
 
-        // -----------------------------
-        // Save parameters
-        // -----------------------------
+        this.emit(`${node.name}:`);
 
-        /*
-         * Windows x64 argument registers:
-         *
-         * 1st argument -> RCX
-         * 2nd argument -> RDX
-         * 3rd argument -> R8
-         * 4th argument -> R9
-         */
+        // Function setup
+        this.emit("    push rbp");
+        this.emit("    mov rbp, rsp");
+        this.emit(`    sub rsp, ${frameSize}`);
 
+        // Windows x64 argument registers
         const parameterRegisters = [
             "rcx",
             "rdx",
@@ -237,38 +173,27 @@ class CodeGenerator {
             "r9"
         ];
 
-        node.parameters.forEach(
-            (parameter, index) => {
-                const offset =
-                    this.variables.get(
-                        parameter.name
-                    );
+        // Store parameters in local variable slots
+        node.parameters.forEach((parameter, index) => {
+            const offset = this.variables.get(parameter.name);
 
-                if (offset === undefined) {
-                    throw new Error(
-                        `Code Generator: unknown parameter '${parameter.name}'.`
-                    );
-                }
-
-                this.emit(
-                    `    mov [rbp - ${offset}], ${parameterRegisters[index]}`
+            if (offset === undefined) {
+                throw new Error(
+                    `Code Generator: unknown parameter '${parameter.name}'.`
                 );
             }
-        );
 
-        // -----------------------------
+            this.emit(
+                `    mov [rbp - ${offset}], ${parameterRegisters[index]}`
+            );
+        });
+
         // Function body
-        // -----------------------------
-
         for (const statement of node.body) {
             this.generateStatement(statement);
         }
 
-        // -----------------------------
-        // Default return
-        // -----------------------------
-
-        // Return 0 if no explicit return was reached.
+        // Default return value = 0
         this.emit("    xor eax, eax");
 
         this.generateFunctionEpilogue();
@@ -276,82 +201,62 @@ class CodeGenerator {
         this.emit("");
     }
 
-    // ==================================================
+    // ==========================================
     // MAIN
-    // ==================================================
+    // ==========================================
 
     generateMain(statements) {
-        // Find variables in main.
         const variableNames =
             this.collectVariables(statements);
 
-        // Create memory locations.
         this.createVariableMap(variableNames);
 
-        // Calculate stack size.
         const frameSize =
-            this.calculateFrameSize(
-                variableNames.length
-            );
+            this.calculateFrameSize(variableNames.length);
 
         this.emit("main:");
 
-        // -----------------------------
-        // Main prologue
-        // -----------------------------
-
         this.emit("    push rbp");
         this.emit("    mov rbp, rsp");
-
-        this.emit(
-            `    sub rsp, ${frameSize}`
-        );
-
-        // -----------------------------
-        // Main statements
-        // -----------------------------
+        this.emit(`    sub rsp, ${frameSize}`);
 
         for (const statement of statements) {
             this.generateStatement(statement);
         }
 
-        // -----------------------------
-        // Return 0
-        // -----------------------------
-
+        // return 0
         this.emit("    xor eax, eax");
 
         this.generateFunctionEpilogue();
     }
 
-    // ==================================================
-    // FUNCTION EPILOGUE
-    // ==================================================
+    // ==========================================
+    // FUNCTION END
+    // ==========================================
 
     generateFunctionEpilogue() {
-        // Put stack pointer back where it was.
         this.emit("    mov rsp, rbp");
-
-        // Restore previous RBP.
         this.emit("    pop rbp");
-
-        // Return to caller.
         this.emit("    ret");
     }
 
-    // ==================================================
+    // ==========================================
     // STATEMENTS
-    // ==================================================
+    // ==========================================
 
     generateStatement(node) {
         switch (node.type) {
-
             case "VariableDeclaration":
                 this.generateVariableDeclaration(node);
                 break;
 
             case "Assignment":
                 this.generateAssignment(node);
+                break;
+
+            // NEW: take(x)
+            case "InputStatement":
+                this.generateTakeStatement(node);
                 break;
 
             case "ReturnStatement":
@@ -383,25 +288,19 @@ class CodeGenerator {
         }
     }
 
-    // ==================================================
+    // ==========================================
     // VARIABLE DECLARATION
-    // ==================================================
+    // ==========================================
 
     generateVariableDeclaration(node) {
-        /*
-         * Example:
-         *
-         * hold a = 10;
-         */
+        // Example:
+        // hold x = 10;
 
-        // Calculate the initial value.
-        // Result goes into RAX.
         this.generateExpressionIntoRAX(
             node.initializer
         );
 
-        const offset =
-            this.variables.get(node.name);
+        const offset = this.variables.get(node.name);
 
         if (offset === undefined) {
             throw new Error(
@@ -409,30 +308,24 @@ class CodeGenerator {
             );
         }
 
-        // Store RAX in the variable's stack slot.
         this.emit(
             `    mov [rbp - ${offset}], rax`
         );
     }
 
-    // ==================================================
+    // ==========================================
     // ASSIGNMENT
-    // ==================================================
+    // ==========================================
 
     generateAssignment(node) {
-        /*
-         * Example:
-         *
-         * a = a - 1;
-         */
+        // Example:
+        // x = x + 1;
 
-        // Calculate right side.
         this.generateExpressionIntoRAX(
             node.value
         );
 
-        const offset =
-            this.variables.get(node.name);
+        const offset = this.variables.get(node.name);
 
         if (offset === undefined) {
             throw new Error(
@@ -440,81 +333,94 @@ class CodeGenerator {
             );
         }
 
-        // Save new value.
         this.emit(
             `    mov [rbp - ${offset}], rax`
         );
     }
 
-    // ==================================================
-    // RETURN STATEMENT
-    // ==================================================
+    // ==========================================
+    // TAKE INPUT
+    // ==========================================
+
+    generateTakeStatement(node) {
+        // Example:
+        // take(x);
+
+        const offset = this.variables.get(node.name);
+
+        if (offset === undefined) {
+            throw new Error(
+                `Code Generator: unknown variable '${node.name}'.`
+            );
+        }
+
+        // scanf("%lld", &x)
+
+        // RDX = address of x
+        this.emit(
+            `    lea rdx, [rbp - ${offset}]`
+        );
+
+        // RCX = "%lld"
+        this.emit(
+            "    lea rcx, [rel input_format]"
+        );
+
+        // Windows x64 requires shadow space
+        this.emit("    sub rsp, 32");
+
+        // Call scanf
+        this.emit("    call scanf");
+
+        // Restore stack
+        this.emit("    add rsp, 32");
+    }
+
+    // ==========================================
+    // RETURN
+    // ==========================================
 
     generateReturnStatement(node) {
-        /*
-         * The return value must be in RAX.
-         */
-
+        // Result goes into RAX
         this.generateExpressionIntoRAX(
             node.value
         );
 
-        // Restore stack and return.
         this.generateFunctionEpilogue();
     }
 
-    // ==================================================
-    // PRINT STATEMENT
-    // ==================================================
+    // ==========================================
+    // MOULD / PRINT
+    // ==========================================
 
     generatePrintStatement(node) {
-        /*
-         * Evaluate expression.
-         *
-         * Example:
-         *
-         * mould(a + b);
-         *
-         * RAX = result
-         */
-
+        // Evaluate expression
         this.generateExpressionIntoRAX(
             node.value
         );
 
-        /*
-         * printf(format, value)
-         *
-         * Windows x64:
-         *
-         * RCX = first argument
-         * RDX = second argument
-         */
+        // printf("%lld\n", value)
 
-        // value -> RDX
+        // RDX = value
         this.emit("    mov rdx, rax");
 
-        // format string -> RCX
+        // RCX = format string
         this.emit(
             "    lea rcx, [rel format]"
         );
 
-        /*
-         * Windows x64 requires 32 bytes
-         * of shadow space before calling
-         * another function.
-         */
-
+        // Shadow space
         this.emit("    sub rsp, 32");
 
         this.emit("    call printf");
 
+        // Restore stack
         this.emit("    add rsp, 32");
     }
 
-    // ==================================================
+    // ==========================================
     // IF / ELSE
-    // ==================================================
+    // ==========================================
 
     generateIfStatement(node) {
         const elseLabel =
@@ -523,43 +429,23 @@ class CodeGenerator {
         const endLabel =
             this.newLabel("endif");
 
-        /*
-         * Generate condition.
-         *
-         * RAX:
-         * 0 = false
-         * 1 = true
-         */
-
+        // Evaluate condition
         this.generateExpressionIntoRAX(
             node.condition
         );
 
-        // Compare RAX with zero.
+        // If RAX == 0 -> false
         this.emit("    cmp rax, 0");
+        this.emit(`    je ${elseLabel}`);
 
-        // If false, jump to ELSE.
-        this.emit(
-            `    je ${elseLabel}`
-        );
-
-        // -----------------------------
-        // THEN branch
-        // -----------------------------
-
+        // THEN BLOCK
         for (const statement of node.thenBranch) {
             this.generateStatement(statement);
         }
 
-        // Skip ELSE.
-        this.emit(
-            `    jmp ${endLabel}`
-        );
+        this.emit(`    jmp ${endLabel}`);
 
-        // -----------------------------
-        // ELSE branch
-        // -----------------------------
-
+        // ELSE BLOCK
         this.emit(`${elseLabel}:`);
 
         if (node.elseBranch) {
@@ -568,16 +454,13 @@ class CodeGenerator {
             }
         }
 
-        // -----------------------------
-        // END
-        // -----------------------------
-
+        // END IF
         this.emit(`${endLabel}:`);
     }
 
-    // ==================================================
+    // ==========================================
     // WHILE LOOP
-    // ==================================================
+    // ==========================================
 
     generateWhileStatement(node) {
         const startLabel =
@@ -586,46 +469,37 @@ class CodeGenerator {
         const endLabel =
             this.newLabel("while_end");
 
-        // Start of loop.
+        // Start loop
         this.emit(`${startLabel}:`);
 
-        // Calculate condition.
+        // Check condition
         this.generateExpressionIntoRAX(
             node.condition
         );
 
-        // Compare with false.
         this.emit("    cmp rax, 0");
 
-        // If false, leave loop.
-        this.emit(
-            `    je ${endLabel}`
-        );
+        // Exit when false
+        this.emit(`    je ${endLabel}`);
 
-        // -----------------------------
         // Loop body
-        // -----------------------------
-
         for (const statement of node.body) {
             this.generateStatement(statement);
         }
 
-        // Go back to beginning.
-        this.emit(
-            `    jmp ${startLabel}`
-        );
+        // Go back to start
+        this.emit(`    jmp ${startLabel}`);
 
-        // End of loop.
+        // End loop
         this.emit(`${endLabel}:`);
     }
 
-    // ==================================================
+    // ==========================================
     // EXPRESSIONS
-    // ==================================================
+    // ==========================================
 
     generateExpressionIntoRAX(node) {
         switch (node.type) {
-
             case "IntegerLiteral":
                 this.emit(
                     `    mov rax, ${node.value}`
@@ -655,13 +529,12 @@ class CodeGenerator {
         }
     }
 
-    // ==================================================
+    // ==========================================
     // IDENTIFIER
-    // ==================================================
+    // ==========================================
 
     generateIdentifier(node) {
-        const offset =
-            this.variables.get(node.name);
+        const offset = this.variables.get(node.name);
 
         if (offset === undefined) {
             throw new Error(
@@ -669,23 +542,14 @@ class CodeGenerator {
             );
         }
 
-        /*
-         * Load variable from stack.
-         *
-         * Example:
-         *
-         * a -> [rbp - 8]
-         * b -> [rbp - 16]
-         */
-
         this.emit(
             `    mov rax, [rbp - ${offset}]`
         );
     }
 
-    // ==================================================
+    // ==========================================
     // UNARY EXPRESSION
-    // ==================================================
+    // ==========================================
 
     generateUnaryExpression(node) {
         this.generateExpressionIntoRAX(
@@ -702,9 +566,9 @@ class CodeGenerator {
         );
     }
 
-    // ==================================================
+    // ==========================================
     // BINARY EXPRESSION
-    // ==================================================
+    // ==========================================
 
     generateBinaryExpression(node) {
         const arithmeticOperators = [
@@ -724,18 +588,14 @@ class CodeGenerator {
         ];
 
         if (
-            arithmeticOperators.includes(
-                node.operator
-            )
+            arithmeticOperators.includes(node.operator)
         ) {
             this.generateArithmetic(node);
             return;
         }
 
         if (
-            comparisonOperators.includes(
-                node.operator
-            )
+            comparisonOperators.includes(node.operator)
         ) {
             this.generateComparison(node);
             return;
@@ -746,115 +606,56 @@ class CodeGenerator {
         );
     }
 
-    // ==================================================
+    // ==========================================
     // ARITHMETIC
-    // ==================================================
+    // ==========================================
 
     generateArithmetic(node) {
-        /*
-         * We want:
-         *
-         * LEFT operator RIGHT
-         *
-         * Example:
-         *
-         * 10 - 3
-         */
-
-        // -----------------------------
-        // Calculate LEFT
-        // -----------------------------
-
+        // LEFT SIDE
         this.generateExpressionIntoRAX(
             node.left
         );
 
-        // Save LEFT.
+        // Save left value
         this.emit("    push rax");
 
-        // -----------------------------
-        // Calculate RIGHT
-        // -----------------------------
-
+        // RIGHT SIDE
         this.generateExpressionIntoRAX(
             node.right
         );
 
-        /*
-         * RIGHT is now in RAX.
-         *
-         * Move it to RCX.
-         */
+        // Save right in RCX
+        this.emit("    mov rcx, rax");
 
-        this.emit(
-            "    mov rcx, rax"
-        );
-
-        /*
-         * LEFT comes back into RAX.
-         */
-
-        this.emit(
-            "    pop rax"
-        );
-
-        // -----------------------------
-        // Perform operation
-        // -----------------------------
+        // Restore left into RAX
+        this.emit("    pop rax");
 
         switch (node.operator) {
-
             case "+":
-                // RAX = left + right
-                this.emit(
-                    "    add rax, rcx"
-                );
+                this.emit("    add rax, rcx");
                 break;
 
             case "-":
-                // RAX = left - right
-                this.emit(
-                    "    sub rax, rcx"
-                );
+                this.emit("    sub rax, rcx");
                 break;
 
             case "*":
-                // RAX = left * right
-                this.emit(
-                    "    imul rax, rcx"
-                );
+                this.emit("    imul rax, rcx");
                 break;
 
             case "/":
-                /*
-                 * Signed integer division:
-                 *
-                 * RAX = dividend
-                 * RCX = divisor
-                 *
-                 * CQO prepares RDX:RAX.
-                 *
-                 * IDIV RCX:
-                 *
-                 * RAX = quotient
-                 * RDX = remainder
-                 */
+                // RAX = dividend
+                // RCX = divisor
 
-                // Keep divisor safe.
-                this.emit(
-                    "    mov r11, rcx"
-                );
+                // Put divisor somewhere safe
+                this.emit("    mov r11, rcx");
 
-                // Prepare RDX:RAX.
-                this.emit(
-                    "    cqo"
-                );
+                // Sign extend RAX into RDX:RAX
+                this.emit("    cqo");
 
-                // Divide RAX by R11.
-                this.emit(
-                    "    idiv r11"
-                );
-
+                // RAX = quotient
+                // RDX = remainder
+                this.emit("    idiv r11");
                 break;
 
             default:
@@ -864,62 +665,34 @@ class CodeGenerator {
         }
     }
 
-    // ==================================================
-    // COMPARISON
-    // ==================================================
+    // ==========================================
+    // COMPARISONS
+    // ==========================================
 
     generateComparison(node) {
-        // -----------------------------
         // LEFT
-        // -----------------------------
-
         this.generateExpressionIntoRAX(
             node.left
         );
 
-        // Save LEFT.
-        this.emit(
-            "    push rax"
-        );
+        this.emit("    push rax");
 
-        // -----------------------------
         // RIGHT
-        // -----------------------------
-
         this.generateExpressionIntoRAX(
             node.right
         );
 
-        /*
-         * RIGHT -> RCX
-         */
+        this.emit("    mov rcx, rax");
 
-        this.emit(
-            "    mov rcx, rax"
-        );
+        // LEFT BACK INTO RAX
+        this.emit("    pop rax");
 
-        /*
-         * LEFT -> RAX
-         */
-
-        this.emit(
-            "    pop rax"
-        );
-
-        /*
-         * Compare:
-         *
-         * RAX with RCX
-         */
-
-        this.emit(
-            "    cmp rax, rcx"
-        );
+        // Compare left and right
+        this.emit("    cmp rax, rcx");
 
         let instruction;
 
         switch (node.operator) {
-
             case ">":
                 instruction = "setg";
                 break;
@@ -950,33 +723,16 @@ class CodeGenerator {
                 );
         }
 
-        /*
-         * SET instructions write 0 or 1
-         * into AL.
-         */
+        // AL becomes 0 or 1
+        this.emit(`    ${instruction} al`);
 
-        this.emit(
-            `    ${instruction} al`
-        );
-
-        /*
-         * Turn:
-         *
-         * AL = 0/1
-         *
-         * into:
-         *
-         * RAX = 0/1
-         */
-
-        this.emit(
-            "    movzx rax, al"
-        );
+        // Convert AL to full 64-bit RAX
+        this.emit("    movzx rax, al");
     }
 
-    // ==================================================
-    // FUNCTION CALL
-    // ==================================================
+    // ==========================================
+    // FUNCTION CALLS
+    // ==========================================
 
     generateFunctionCall(node) {
         const argumentRegisters = [
@@ -992,17 +748,7 @@ class CodeGenerator {
             );
         }
 
-        /*
-         * Windows x64:
-         *
-         * argument 1 -> RCX
-         * argument 2 -> RDX
-         * argument 3 -> R8
-         * argument 4 -> R9
-         *
-         * We evaluate from right to left.
-         */
-
+        // Evaluate arguments from right to left
         for (
             let i = node.arguments.length - 1;
             i >= 0;
@@ -1012,15 +758,10 @@ class CodeGenerator {
                 node.arguments[i]
             );
 
-            this.emit(
-                "    push rax"
-            );
+            this.emit("    push rax");
         }
 
-        // -----------------------------
         // Move arguments into registers
-        // -----------------------------
-
         for (
             let i = 0;
             i < node.arguments.length;
@@ -1031,27 +772,29 @@ class CodeGenerator {
             );
         }
 
-        /*
-         * Windows x64 requires 32 bytes
-         * of shadow space.
-         */
+        // Keep stack aligned when needed
+        const needsPadding =
+            node.arguments.length % 2 !== 0;
 
-        this.emit(
-            "    sub rsp, 32"
-        );
+        if (needsPadding) {
+            this.emit("    sub rsp, 8");
+        }
 
-        this.emit(
-            `    call ${node.name}`
-        );
+        // Windows x64 shadow space
+        this.emit("    sub rsp, 32");
 
-        this.emit(
-            "    add rsp, 32"
-        );
+        // Call function
+        this.emit(`    call ${node.name}`);
 
-        /*
-         * Function return value remains
-         * in RAX.
-         */
+        // Remove shadow space
+        this.emit("    add rsp, 32");
+
+        // Remove alignment padding
+        if (needsPadding) {
+            this.emit("    add rsp, 8");
+        }
+
+        // Function result remains in RAX
     }
 }
 

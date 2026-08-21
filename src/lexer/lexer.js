@@ -5,6 +5,13 @@ class Lexer {
         this.source = source;
         this.position = 0;
         this.tokens = [];
+
+        // Stack of indentation levels.
+        // 0 means no indentation.
+        this.indentStack = [0];
+
+        // True when we are at the beginning of a line.
+        this.atLineStart = true;
     }
 
     isAtEnd() {
@@ -47,6 +54,81 @@ class Lexer {
             this.isDigit(character)
         );
     }
+
+    // ==================================================
+    // INDENTATION
+    // ==================================================
+
+    scanIndentation() {
+        let tabCount = 0;
+
+        // Count tabs at the beginning of the line.
+        while (this.peek() === "\t") {
+            this.advance();
+            tabCount++;
+        }
+
+        // Spaces cannot be used for indentation.
+        if (this.peek() === " ") {
+            throw new Error(
+                "Lexer Error: Spaces cannot be used for indentation. Use tabs."
+            );
+        }
+
+        const currentIndent =
+            this.indentStack[
+                this.indentStack.length - 1
+            ];
+
+        // Entering a deeper block.
+        if (tabCount > currentIndent) {
+            this.indentStack.push(tabCount);
+
+            this.tokens.push(
+                new Token(
+                    TokenType.INDENT,
+                    ""
+                )
+            );
+        }
+
+        // Leaving one or more blocks.
+        else if (tabCount < currentIndent) {
+            while (
+                this.indentStack.length > 1 &&
+                tabCount <
+                    this.indentStack[
+                        this.indentStack.length - 1
+                    ]
+            ) {
+                this.indentStack.pop();
+
+                this.tokens.push(
+                    new Token(
+                        TokenType.DEDENT,
+                        ""
+                    )
+                );
+            }
+
+            const finalIndent =
+                this.indentStack[
+                    this.indentStack.length - 1
+                ];
+
+            if (tabCount !== finalIndent) {
+                throw new Error(
+                    "Lexer Error: Invalid indentation level."
+                );
+            }
+        }
+
+        this.atLineStart = false;
+    }
+
+    // ==================================================
+    // IDENTIFIERS / KEYWORDS
+    // ==================================================
 
     scanIdentifier() {
         let value = "";
@@ -98,19 +180,38 @@ class Lexer {
                 );
                 break;
 
+            case "take":
+                this.tokens.push(
+                    new Token(TokenType.TAKE, value)
+                );
+                break;
+
             case "point":
                 this.tokens.push(
                     new Token(TokenType.POINT, value)
                 );
                 break;
 
+            case "newline":
+                this.tokens.push(
+                    new Token(TokenType.NEWLINE, value)
+                );
+                break;
+
             default:
                 this.tokens.push(
-                    new Token(TokenType.IDENTIFIER, value)
+                    new Token(
+                        TokenType.IDENTIFIER,
+                        value
+                    )
                 );
                 break;
         }
     }
+
+    // ==================================================
+    // NUMBERS
+    // ==================================================
 
     scanNumber() {
         let value = "";
@@ -120,160 +221,266 @@ class Lexer {
         }
 
         this.tokens.push(
-            new Token(TokenType.INTEGER, value)
+            new Token(
+                TokenType.INTEGER,
+                value
+            )
         );
     }
+
+    // ==================================================
+    // SCAN ONE TOKEN
+    // ==================================================
 
     scanToken() {
         const character = this.advance();
 
-        // Ignore whitespace
-        if (
-            character === " " ||
-            character === "\n" ||
-            character === "\t" ||
-            character === "\r"
-        ) {
+        // Newline
+        if (character === "\n") {
+            this.tokens.push(
+                new Token(
+                    TokenType.NEWLINE,
+                    "\\n"
+                )
+            );
+
+            this.atLineStart = true;
             return;
         }
 
-        // Identifier / keyword
+        // Ignore carriage return.
+        if (character === "\r") {
+            return;
+        }
+
+        // Start of a line.
+        if (this.atLineStart) {
+            this.position--;
+
+            this.scanIndentation();
+
+            return;
+        }
+
+        // Spaces inside a line are ignored.
+        if (character === " ") {
+            return;
+        }
+
+        // Identifier / keyword.
         if (this.isLetter(character)) {
             this.position--;
+
             this.scanIdentifier();
+
             return;
         }
 
-        // Number
+        // Number.
         if (this.isDigit(character)) {
             this.position--;
+
             this.scanNumber();
+
             return;
         }
 
-        // Two-character operators
-        if (character === "=" && this.peek() === "=") {
+        // ==================================================
+        // TWO-CHARACTER OPERATORS
+        // ==================================================
+
+        if (
+            character === "=" &&
+            this.peek() === "="
+        ) {
             this.advance();
 
             this.tokens.push(
-                new Token(TokenType.EQUAL_EQUAL, "==")
+                new Token(
+                    TokenType.EQUAL_EQUAL,
+                    "=="
+                )
             );
 
             return;
         }
 
-        if (character === "!" && this.peek() === "=") {
+        if (
+            character === "!" &&
+            this.peek() === "="
+        ) {
             this.advance();
 
             this.tokens.push(
-                new Token(TokenType.NOT_EQUAL, "!=")
+                new Token(
+                    TokenType.NOT_EQUAL,
+                    "!="
+                )
             );
 
             return;
         }
 
-        if (character === ">" && this.peek() === "=") {
+        if (
+            character === ">" &&
+            this.peek() === "="
+        ) {
             this.advance();
 
             this.tokens.push(
-                new Token(TokenType.GREATER_EQUAL, ">=")
+                new Token(
+                    TokenType.GREATER_EQUAL,
+                    ">="
+                )
             );
 
             return;
         }
 
-        if (character === "<" && this.peek() === "=") {
+        if (
+            character === "<" &&
+            this.peek() === "="
+        ) {
             this.advance();
 
             this.tokens.push(
-                new Token(TokenType.LESS_EQUAL, "<=")
+                new Token(
+                    TokenType.LESS_EQUAL,
+                    "<="
+                )
             );
 
             return;
         }
+
+        // ==================================================
+        // ONE-CHARACTER OPERATORS
+        // ==================================================
 
         switch (character) {
             case "|":
                 this.tokens.push(
-                    new Token(TokenType.PIPE, "|")
+                    new Token(
+                        TokenType.PIPE,
+                        "|"
+                    )
                 );
                 break;
 
             case "+":
                 this.tokens.push(
-                    new Token(TokenType.PLUS, "+")
+                    new Token(
+                        TokenType.PLUS,
+                        "+"
+                    )
                 );
                 break;
 
             case "-":
                 this.tokens.push(
-                    new Token(TokenType.MINUS, "-")
+                    new Token(
+                        TokenType.MINUS,
+                        "-"
+                    )
                 );
                 break;
 
             case "*":
                 this.tokens.push(
-                    new Token(TokenType.STAR, "*")
+                    new Token(
+                        TokenType.STAR,
+                        "*"
+                    )
                 );
                 break;
 
             case "/":
                 this.tokens.push(
-                    new Token(TokenType.SLASH, "/")
+                    new Token(
+                        TokenType.SLASH,
+                        "/"
+                    )
                 );
                 break;
 
             case ">":
                 this.tokens.push(
-                    new Token(TokenType.GREATER, ">")
+                    new Token(
+                        TokenType.GREATER,
+                        ">"
+                    )
                 );
                 break;
 
             case "<":
                 this.tokens.push(
-                    new Token(TokenType.LESS, "<")
+                    new Token(
+                        TokenType.LESS,
+                        "<"
+                    )
                 );
                 break;
 
             case "=":
                 this.tokens.push(
-                    new Token(TokenType.ASSIGN, "=")
+                    new Token(
+                        TokenType.ASSIGN,
+                        "="
+                    )
                 );
                 break;
 
             case ".":
                 this.tokens.push(
-                    new Token(TokenType.DOT, ".")
+                    new Token(
+                        TokenType.DOT,
+                        "."
+                    )
                 );
                 break;
 
             case ":":
                 this.tokens.push(
-                    new Token(TokenType.COLON, ":")
+                    new Token(
+                        TokenType.COLON,
+                        ":"
+                    )
                 );
                 break;
 
             case "(":
                 this.tokens.push(
-                    new Token(TokenType.LPAREN, "(")
+                    new Token(
+                        TokenType.LPAREN,
+                        "("
+                    )
                 );
                 break;
 
             case ")":
                 this.tokens.push(
-                    new Token(TokenType.RPAREN, ")")
+                    new Token(
+                        TokenType.RPAREN,
+                        ")"
+                    )
                 );
                 break;
 
             case ",":
                 this.tokens.push(
-                    new Token(TokenType.COMMA, ",")
+                    new Token(
+                        TokenType.COMMA,
+                        ","
+                    )
                 );
                 break;
 
             case ";":
                 this.tokens.push(
-                    new Token(TokenType.SEMICOLON, ";")
+                    new Token(
+                        TokenType.SEMICOLON,
+                        ";"
+                    )
                 );
                 break;
 
@@ -284,13 +491,41 @@ class Lexer {
         }
     }
 
+    // ==================================================
+    // TOKENIZE
+    // ==================================================
+
     tokenize() {
         while (!this.isAtEnd()) {
+
+            if (this.atLineStart) {
+                this.scanIndentation();
+
+                if (this.isAtEnd()) {
+                    break;
+                }
+            }
+
             this.scanToken();
         }
 
+        // Close any remaining indentation levels.
+        while (this.indentStack.length > 1) {
+            this.indentStack.pop();
+
+            this.tokens.push(
+                new Token(
+                    TokenType.DEDENT,
+                    ""
+                )
+            );
+        }
+
         this.tokens.push(
-            new Token(TokenType.EOF, "")
+            new Token(
+                TokenType.EOF,
+                ""
+            )
         );
 
         return this.tokens;

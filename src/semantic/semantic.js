@@ -6,14 +6,14 @@ class SemanticAnalyzer {
     }
 
     analyze(ast) {
-        // First pass: find all functions.
+        // First pass: collect all function declarations.
         for (const node of ast.body) {
             if (node.type === "FunctionDeclaration") {
                 this.declareFunction(node);
             }
         }
 
-        // Second pass: check every part of the program.
+        // Second pass: check all nodes.
         for (const node of ast.body) {
             if (node.type === "FunctionDeclaration") {
                 this.checkFunction(node);
@@ -45,6 +45,7 @@ class SemanticAnalyzer {
         this.currentFunction = node;
         this.currentVariables = new Set();
 
+        // Add function parameters to the variable list.
         for (const parameter of node.parameters) {
             if (this.currentVariables.has(parameter.name)) {
                 throw new Error(
@@ -55,6 +56,7 @@ class SemanticAnalyzer {
             this.currentVariables.add(parameter.name);
         }
 
+        // Check every statement in the function.
         for (const statement of node.body) {
             this.checkStatement(statement, true);
         }
@@ -113,6 +115,16 @@ class SemanticAnalyzer {
                 break;
             }
 
+            case "InputStatement": {
+                if (!this.currentVariables.has(node.name)) {
+                    throw new Error(
+                        `Semantic Error: Undefined variable '${node.name}'.`
+                    );
+                }
+
+                break;
+            }
+
             case "ReturnStatement": {
                 if (!insideFunction) {
                     throw new Error(
@@ -148,16 +160,13 @@ class SemanticAnalyzer {
             }
 
             case "ExpressionStatement":
-                this.checkExpression(
-                    node.expression
-                );
+                this.checkExpression(node.expression);
                 break;
 
             case "IfStatement": {
-                const conditionType =
-                    this.checkExpression(
-                        node.condition
-                    );
+                const conditionType = this.checkExpression(
+                    node.condition
+                );
 
                 if (conditionType !== "bool") {
                     throw new Error(
@@ -185,10 +194,9 @@ class SemanticAnalyzer {
             }
 
             case "WhileStatement": {
-                const conditionType =
-                    this.checkExpression(
-                        node.condition
-                    );
+                const conditionType = this.checkExpression(
+                    node.condition
+                );
 
                 if (conditionType !== "bool") {
                     throw new Error(
@@ -235,8 +243,9 @@ class SemanticAnalyzer {
                     );
                 }
 
-                const type =
-                    this.checkExpression(node.right);
+                const type = this.checkExpression(
+                    node.right
+                );
 
                 if (type !== "int") {
                     throw new Error(
@@ -248,11 +257,13 @@ class SemanticAnalyzer {
             }
 
             case "BinaryExpression": {
-                const leftType =
-                    this.checkExpression(node.left);
+                const leftType = this.checkExpression(
+                    node.left
+                );
 
-                const rightType =
-                    this.checkExpression(node.right);
+                const rightType = this.checkExpression(
+                    node.right
+                );
 
                 const arithmeticOperators = [
                     "+",
@@ -270,11 +281,7 @@ class SemanticAnalyzer {
                     "!="
                 ];
 
-                if (
-                    arithmeticOperators.includes(
-                        node.operator
-                    )
-                ) {
+                if (arithmeticOperators.includes(node.operator)) {
                     if (
                         leftType !== "int" ||
                         rightType !== "int"
@@ -287,11 +294,7 @@ class SemanticAnalyzer {
                     return "int";
                 }
 
-                if (
-                    comparisonOperators.includes(
-                        node.operator
-                    )
-                ) {
+                if (comparisonOperators.includes(node.operator)) {
                     if (
                         leftType !== "int" ||
                         rightType !== "int"
@@ -320,8 +323,7 @@ class SemanticAnalyzer {
     }
 
     checkFunctionCall(node) {
-        const functionInfo =
-            this.functions.get(node.name);
+        const functionInfo = this.functions.get(node.name);
 
         if (!functionInfo) {
             throw new Error(
@@ -341,8 +343,7 @@ class SemanticAnalyzer {
         }
 
         for (const argument of node.arguments) {
-            const type =
-                this.checkExpression(argument);
+            const type = this.checkExpression(argument);
 
             if (type !== "int") {
                 throw new Error(

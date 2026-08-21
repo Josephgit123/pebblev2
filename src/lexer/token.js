@@ -7,6 +7,7 @@ const TokenType = {
     IF: "IF",
     ELSE: "ELSE",
     WHILE: "WHILE",
+    TAKE: "TAKE",
 
     // Special types
     POINT: "POINT",
@@ -40,6 +41,11 @@ const TokenType = {
     RPAREN: "RPAREN",
     COMMA: "COMMA",
     SEMICOLON: "SEMICOLON",
+
+    // Indentation
+    NEWLINE: "NEWLINE",
+    INDENT: "INDENT",
+    DEDENT: "DEDENT",
 
     EOF: "EOF"
 };
