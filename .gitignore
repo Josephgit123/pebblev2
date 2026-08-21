@@ -1,0 +1,5 @@
+*.asm
+*.obj
+*.exe
+node_modules/
+*.log

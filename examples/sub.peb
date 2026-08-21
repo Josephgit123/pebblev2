@@ -1,6 +1,4 @@
 craft subtraction | a, b |
-(
-    make a - b;
-)
+	make a - b;
 
 mould(subtraction | 10, 3 |);

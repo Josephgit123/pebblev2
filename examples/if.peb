@@ -1,10 +1,5 @@
 craft check | x |
-(
-    if x > 5 (
-        make 100;
-    )
-
-    make 0;
-)
+	if x > 5
+		make 100;
 
 mould(check | 10 |);

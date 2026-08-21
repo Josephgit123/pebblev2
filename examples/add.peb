@@ -1,6 +1,4 @@
 craft add | a, b |
-(
-    make a + b;
-)
+	make a + b;
 
-mould(add | 30, 20 |);
+mould(add | 10, 20 |);

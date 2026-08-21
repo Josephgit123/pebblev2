@@ -1,7 +1,16 @@
-hold a = 10;
-hold b = 3;
+craft addition | a, b |
+	make a + b;
 
-mould(a + b);
-mould(a - b);
-mould(a * b);
-mould(a / b);
+craft subtraction | a, b |
+	make a - b;
+
+craft multiplication | a, b |
+	make a * b;
+
+craft division | a, b |
+	make a / b;
+
+mould(addition | 10, 3 |);
+mould(subtraction | 10, 3 |);
+mould(multiplication | 10, 3 |);
+mould(division | 10, 3 |);
